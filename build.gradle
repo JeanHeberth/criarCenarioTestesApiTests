@@ -1,0 +1,134 @@
+plugins {
+    id 'java'
+    id 'io.qameta.allure' version '4.1.0'
+}
+
+group = 'br.com.criarCenarioTestesApiTests'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+allure {
+    adapter {
+        allureJavaVersion = '2.35.2'
+        autoconfigure = true
+        autoconfigureListeners = true
+        resultsDir = layout.buildDirectory.dir('allure-results')
+
+        frameworks {
+            testng {
+                enabled = true
+            }
+        }
+    }
+
+    report {
+        dependsOnTests = true
+        reportDir.set(layout.buildDirectory.dir('allure-report'))
+    }
+}
+
+dependencies {
+    implementation 'io.rest-assured:rest-assured:5.5.0'
+    implementation 'org.yaml:snakeyaml:2.3'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+
+    implementation 'org.slf4j:slf4j-api:2.0.16'
+    implementation 'org.slf4j:slf4j-simple:2.0.16'
+
+    compileOnly 'org.projectlombok:lombok:1.18.46'
+    annotationProcessor 'org.projectlombok:lombok:1.18.46'
+
+    testImplementation 'org.testng:testng:7.10.2'
+    testImplementation 'io.qameta.allure:allure-testng:2.35.2'
+    testImplementation 'io.qameta.allure:allure-rest-assured:2.35.2'
+    testCompileOnly 'org.projectlombok:lombok:1.18.46'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.46'
+}
+
+tasks.withType(Test).configureEach {
+
+    useTestNG()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    systemProperty(
+            'allure.results.directory',
+            layout.buildDirectory
+                    .dir('allure-results')
+                    .get()
+                    .asFile
+                    .absolutePath
+    )
+
+    // Repassa a URL base da API sob teste, se informada pelo ambiente/CI.
+    systemProperty 'api.baseUrl', System.getProperty('api.baseUrl', System.getenv('API_BASE_URL') ?: '')
+
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+        showStandardStreams = true
+    }
+}
+
+tasks.register('testSmoke', Test) {
+    description = 'Suite rápida e determinística (sem dependência de IA/Jira reais) — usada no pipeline de merge para develop.'
+    group = 'verification'
+
+    useTestNG {
+        suites 'src/test/resources/testng-smoke.xml'
+    }
+}
+
+tasks.register('testRegression', Test) {
+    description = 'Suite completa, incluindo cenários end-to-end que dependem de IA/Mongo/Jira reais.'
+    group = 'verification'
+
+    useTestNG {
+        suites 'src/test/resources/testng-regression.xml'
+    }
+}
+
+tasks.register('testWorkflow', Test) {
+    description = 'Executa os testes de listagem de workflows.'
+    group = 'verification'
+    include '**/workflow/**'
+}
+
+tasks.register('testCenario', Test) {
+    description = 'Executa os testes de cenário.'
+    group = 'verification'
+    include '**/cenario/**'
+}
+
+tasks.register('testJira', Test) {
+    description = 'Executa os testes de integração com Jira.'
+    group = 'verification'
+    include '**/jira/**'
+}
+
+tasks.register('testAgent', Test) {
+    description = 'Executa os testes de agentes de IA.'
+    group = 'verification'
+    include '**/agent/**'
+}
+
+tasks.register('testAutoQa', Test) {
+    description = 'Executa os testes do ciclo de execução Auto QA.'
+    group = 'verification'
+    include '**/autoqa/**'
+}
+
+test {
+    description = 'Executa todos os testes automatizados (equivalente à suite de regressão).'
+    useTestNG {
+        suites 'src/test/resources/testng-regression.xml'
+    }
+}

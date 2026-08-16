@@ -9,6 +9,7 @@ import config.Configuration;
 import config.Environment;
 import factories.cenario.CenarioRequestFactory;
 import io.restassured.response.Response;
+import models.request.cenario.CenarioRequest;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
@@ -19,24 +20,6 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
-/**
- * Verificação e2e de ponta a ponta: gera um cenário real via IA
- * (POST /cenario, que aciona o pipeline BMAD incluindo o novo
- * ZephyrPublisherAgent) e, para cada item retornado, consulta a API OFICIAL
- * do Zephyr Scale (não a nossa API) para confirmar que o caso de teste
- * publicado existe de verdade e tem o nome esperado. Sem essa segunda
- * chamada independente, estaríamos só confiando na palavra da nossa própria
- * API — o que não prova nada sobre o sistema externo.
- *
- * Cria artefatos REAIS e permanentes no projeto Zephyr configurado (custa
- * tempo de IA + fica um caso de teste novo no board a cada execução), por
- * isso fica desabilitado por padrão. Para rodar de verdade:
- *   1. Na API sob teste: ZEPHYR_ENABLED=true, ZEPHYR_API_TOKEN,
- *      ZEPHYR_PROJECT_KEY configurados e apontando pro projeto certo.
- *   2. Neste projeto de testes: variável de ambiente ZEPHYR_API_TOKEN (ou
- *      -Dzephyr.apiToken=...) com um token válido do Zephyr Scale.
- *   3. Remover enabled = false abaixo.
- */
 public class ZephyrPublishingTest extends BaseTest {
 
     private CenarioClient cenarioClient;
@@ -51,9 +34,31 @@ public class ZephyrPublishingTest extends BaseTest {
         zephyrVerificationClient = new ZephyrVerificationClient();
     }
 
-    @Test(groups = "e2e", enabled = false,
+    @Test(groups = "e2e",
             description = "Deve gerar um cenário real via IA, publicá-lo no Zephyr e confirmar, consultando a API oficial do Zephyr, que o caso de teste existe de verdade")
     public void gerarCenario_devePublicarCasosDeTesteReaisNoZephyr() {
+        gerarEVerificarPublicacaoReal(CenarioRequestFactory.valido());
+    }
+
+    @Test(groups = "e2e",
+            description = "Domínio diferente de login (carrinho de compras): prova que a publicação e a criação de pasta no Zephyr não ficam amarradas ao cenário de autenticação")
+    public void gerarCenario_dominioDiferenteDeLogin_devePublicarCasosDeTesteReaisNoZephyr() {
+        gerarEVerificarPublicacaoReal(CenarioRequestFactory.validoCarrinhoDeCompras());
+    }
+
+    // Issue real do board SCRUM do usuário (Automacao API) - ver
+    // "Automacao JAVA do POST Usuario". Ajuste aqui se a issue for arquivada.
+    private static final String JIRA_ISSUE_KEY_REAL = "SCRUM-29";
+
+    @Test(groups = "e2e",
+            description = "Quando o pedido informa jiraIssueKey, cada caso de teste publicado deve aparecer vinculado a essa issue na aba Traceability do Zephyr")
+    public void gerarCenario_comJiraIssueKey_devePublicarCasosDeTesteVinculadosNoZephyr() {
+        CenarioRequest request = CenarioRequestFactory.comIssueJira(JIRA_ISSUE_KEY_REAL);
+
+        gerarEVerificarPublicacaoReal(request);
+    }
+
+    private void gerarEVerificarPublicacaoReal(CenarioRequest request) {
         String tokenZephyr = Environment.getZephyrApiToken();
         if (tokenZephyr == null || tokenZephyr.isBlank()) {
             fail("ZEPHYR_API_TOKEN não configurado neste projeto de testes - "
@@ -61,7 +66,7 @@ public class ZephyrPublishingTest extends BaseTest {
         }
 
         // 1) Aciona a geração real (IA) na API sob teste.
-        Response cenarioResponse = cenarioClient.gerarCenario(CenarioRequestFactory.valido());
+        Response cenarioResponse = cenarioClient.gerarCenario(request);
         cenarioResponse.then().statusCode(200);
 
         List<Map<String, Object>> cenarios = cenarioResponse.jsonPath().getList("cenarios");
@@ -89,6 +94,29 @@ public class ZephyrPublishingTest extends BaseTest {
                     "Key retornada pelo Zephyr não bate com a key publicada");
             assertEquals(zephyrResponse.jsonPath().getString("name"), nome,
                     "Nome do caso de teste no Zephyr não bate com o cenário gerado");
+
+            // 3) A pasta também precisa existir de verdade e ter o nome certo -
+            // quando o item não define CenarioItem#pasta, ZephyrPublisherAgent
+            // cai pro título do pedido (ver resolverFolderId).
+            Integer folderId = zephyrResponse.jsonPath().getInt("folder.id");
+            if (folderId != null) {
+                Response folderResponse = zephyrVerificationClient.buscarPasta(folderId);
+                folderResponse.then().statusCode(200);
+                assertEquals(folderResponse.jsonPath().getString("name"), request.getTitulo(),
+                        "Nome da pasta no Zephyr não bate com o título do pedido");
+            }
+
+            // 4) Quando o pedido informou jiraIssueKey, o caso de teste precisa
+            // estar vinculado de verdade a essa issue (aba Traceability).
+            if (request.getJiraIssueKey() != null && !request.getJiraIssueKey().isBlank()) {
+                Response linksResponse = zephyrVerificationClient.buscarLinks(testCaseKey);
+                linksResponse.then().statusCode(200);
+
+                List<Map<String, Object>> issuesLinkadas = linksResponse.jsonPath().getList("issues");
+                assertFalse(issuesLinkadas == null || issuesLinkadas.isEmpty(),
+                        "Caso de teste '" + testCaseKey + "' deveria estar vinculado à issue "
+                                + request.getJiraIssueKey() + ", mas não tem nenhum link de issue no Zephyr");
+            }
         }
     }
 }

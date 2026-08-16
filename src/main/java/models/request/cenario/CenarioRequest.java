@@ -21,4 +21,7 @@ public class CenarioRequest {
     private String regraDeNegocio;
     private String agent;
     private String workflowType;
+    // Opcional: quando informada, ZephyrPublisherAgent vincula cada caso de
+    // teste criado a essa issue do Jira (aba "Traceability" no Zephyr).
+    private String jiraIssueKey;
 }

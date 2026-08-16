@@ -24,4 +24,22 @@ public class ZephyrVerificationClient {
                 .when()
                 .get("/testcases/{testCaseKey}", testCaseKey);
     }
+
+    public Response buscarPasta(long folderId) {
+        return given()
+                .baseUri(Environment.getZephyrBaseUri())
+                .auth().oauth2(Environment.getZephyrApiToken())
+                .accept(ContentType.JSON)
+                .when()
+                .get("/folders/{folderId}", folderId);
+    }
+
+    public Response buscarLinks(String testCaseKey) {
+        return given()
+                .baseUri(Environment.getZephyrBaseUri())
+                .auth().oauth2(Environment.getZephyrApiToken())
+                .accept(ContentType.JSON)
+                .when()
+                .get("/testcases/{testCaseKey}/links", testCaseKey);
+    }
 }

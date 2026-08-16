@@ -1,31 +1,3 @@
-/*
- * Pipeline de testes automatizados (TestNG + RestAssured) para a API
- * criar-cenario-testes.
- *
- * COMO ESTE JOB É DISPARADO
- * Este Jenkinsfile vive no repositório de TESTES, mas precisa reagir a
- * merges na branch `develop` do repositório da API (outro repositório).
- * Jenkins não sabe "escutar" pushes de um repo dentro do Jenkinsfile de
- * outro — isso é configuração do JOB, não do Pipeline script. Duas
- * opções, da mais simples para a mais desacoplada:
- *
- *   1) [Recomendado] Downstream trigger: ao final do Jenkinsfile da API
- *      (criar-cenario-testes/Jenkinsfile), quando a branch for `develop`,
- *      chamar:
- *          build job: 'criar-cenario-testes-api-tests', wait: false,
- *              parameters: [string(name: 'API_GIT_BRANCH', value: env.BRANCH_NAME ?: 'develop')]
- *      Isso NÃO foi adicionado automaticamente ao Jenkinsfile da API —
- *      é uma mudança em outro repositório e deve ser feita conscientemente.
- *
- *   2) Configurar este job na UI do Jenkins com um webhook do provedor
- *      Git apontando para o repositório da API, branch `develop`
- *      (plugin "Generic Webhook Trigger" ou GitHub/GitLab webhook +
- *      "Pipeline script from SCM" configurado para o repo de testes).
- *
- * O parâmetro API_GIT_BRANCH abaixo permite executar manualmente contra
- * qualquer branch da API (útil para validar uma feature antes do merge).
- */
-
 pipeline {
     agent any
 
@@ -85,13 +57,15 @@ pipeline {
 
         stage('Subir API via Docker Compose') {
             steps {
+                // Mongo/OpenAI/Gemini são obrigatórios — a API não sobe sem eles
+                // (sem valor default em application.yml). Jira é opcional: tem
+                // default vazio (${JIRA_BASE_URL:}) e a suite smoke nunca chama
+                // o Jira de verdade, só valida formato de taskKey antes de
+                // qualquer chamada externa.
                 withCredentials([
-                    string(credentialsId: 'criar-cenario-testes-mongo-uri',      variable: 'MONGO_URI_NUVEM'),
-                    string(credentialsId: 'criar-cenario-testes-openai-key',     variable: 'OPENAI_API_KEY'),
-                    string(credentialsId: 'criar-cenario-testes-gemini-key',     variable: 'GEMINI_API_KEY'),
-                    string(credentialsId: 'criar-cenario-testes-jira-base-url',  variable: 'JIRA_BASE_URL'),
-                    string(credentialsId: 'criar-cenario-testes-jira-email',     variable: 'JIRA_EMAIL'),
-                    string(credentialsId: 'criar-cenario-testes-jira-api-token', variable: 'JIRA_API_TOKEN')
+                    string(credentialsId: 'criar-cenario-testes-mongo-uri',  variable: 'MONGO_URI_NUVEM'),
+                    string(credentialsId: 'criar-cenario-testes-openai-key', variable: 'OPENAI_API_KEY'),
+                    string(credentialsId: 'criar-cenario-testes-gemini-key', variable: 'GEMINI_API_KEY')
                 ]) {
                     script {
                         if (isUnix()) {
@@ -102,19 +76,8 @@ pipeline {
 MONGO_URI_NUVEM=$MONGO_URI_NUVEM
 OPENAI_API_KEY=$OPENAI_API_KEY
 GEMINI_API_KEY=$GEMINI_API_KEY
-JIRA_BASE_URL=$JIRA_BASE_URL
-JIRA_EMAIL=$JIRA_EMAIL
-JIRA_API_TOKEN=$JIRA_API_TOKEN
 APP_CORS_ALLOWED_ORIGINS=
 EOF
-
-                                echo "Subindo backend via docker compose (projeto: $COMPOSE_PROJECT)..."
-
-                                docker compose \
-                                    -f "$API_CHECKOUT_DIR/docker-compose.yml" \
-                                    --env-file "$API_CHECKOUT_DIR/.env" \
-                                    -p "$COMPOSE_PROJECT" \
-                                    up -d --build backend
                             '''
                         } else {
                             bat '''
@@ -124,23 +87,85 @@ EOF
                                     echo MONGO_URI_NUVEM=%MONGO_URI_NUVEM%
                                     echo OPENAI_API_KEY=%OPENAI_API_KEY%
                                     echo GEMINI_API_KEY=%GEMINI_API_KEY%
-                                    echo JIRA_BASE_URL=%JIRA_BASE_URL%
-                                    echo JIRA_EMAIL=%JIRA_EMAIL%
-                                    echo JIRA_API_TOKEN=%JIRA_API_TOKEN%
                                     echo APP_CORS_ALLOWED_ORIGINS=
                                 ) > "%API_CHECKOUT_DIR%\\.env"
-
-                                echo Subindo backend via docker compose (projeto: %COMPOSE_PROJECT%)...
-
-                                docker compose ^
-                                    -f "%API_CHECKOUT_DIR%\\docker-compose.yml" ^
-                                    --env-file "%API_CHECKOUT_DIR%\\.env" ^
-                                    -p "%COMPOSE_PROJECT%" ^
-                                    up -d --build backend
-
-                                if errorlevel 1 exit /b %ERRORLEVEL%
                             '''
                         }
+                    }
+                }
+
+                script {
+                    try {
+                        withCredentials([
+                            string(credentialsId: 'criar-cenario-testes-jira-base-url',  variable: 'JIRA_BASE_URL'),
+                            string(credentialsId: 'criar-cenario-testes-jira-email',     variable: 'JIRA_EMAIL'),
+                            string(credentialsId: 'criar-cenario-testes-jira-api-token', variable: 'JIRA_API_TOKEN')
+                        ]) {
+                            if (isUnix()) {
+                                sh '''
+                                    cat >> "$API_CHECKOUT_DIR/.env" <<EOF
+JIRA_BASE_URL=$JIRA_BASE_URL
+JIRA_EMAIL=$JIRA_EMAIL
+JIRA_API_TOKEN=$JIRA_API_TOKEN
+EOF
+                                '''
+                            } else {
+                                bat '''
+                                    @echo off
+                                    (
+                                        echo JIRA_BASE_URL=%JIRA_BASE_URL%
+                                        echo JIRA_EMAIL=%JIRA_EMAIL%
+                                        echo JIRA_API_TOKEN=%JIRA_API_TOKEN%
+                                    ) >> "%API_CHECKOUT_DIR%\\.env"
+                                '''
+                            }
+                        }
+                    } catch (err) {
+                        echo 'Credenciais do Jira não configuradas no Jenkins — seguindo sem integração real com Jira (a suite smoke não depende disso; necessário só para os testes do grupo e2e de Jira).'
+                        if (isUnix()) {
+                            sh '''
+                                cat >> "$API_CHECKOUT_DIR/.env" <<EOF
+JIRA_BASE_URL=
+JIRA_EMAIL=
+JIRA_API_TOKEN=
+EOF
+                            '''
+                        } else {
+                            bat '''
+                                @echo off
+                                (
+                                    echo JIRA_BASE_URL=
+                                    echo JIRA_EMAIL=
+                                    echo JIRA_API_TOKEN=
+                                ) >> "%API_CHECKOUT_DIR%\\.env"
+                            '''
+                        }
+                    }
+                }
+
+                script {
+                    echo "Subindo backend via docker compose (projeto: ${COMPOSE_PROJECT})..."
+
+                    if (isUnix()) {
+                        sh '''
+                            docker compose \
+                                -f "$API_CHECKOUT_DIR/docker-compose.yml" \
+                                --env-file "$API_CHECKOUT_DIR/.env" \
+                                -p "$COMPOSE_PROJECT" \
+                                up -d --build backend
+                        '''
+                    } else {
+                        bat '''
+                            @echo off
+
+                            docker compose ^
+                                -f "%API_CHECKOUT_DIR%\\docker-compose.yml" ^
+                                --env-file "%API_CHECKOUT_DIR%\\.env" ^
+                                -p "%COMPOSE_PROJECT%" ^
+                                up -d --build backend
+
+                            if errorlevel 1 exit /b %ERRORLEVEL%
+                        '''
                     }
                 }
             }
@@ -305,8 +330,10 @@ EOF
                     '''
                 } else {
                     bat '''
+                        @echo off
                         docker compose -f "%API_CHECKOUT_DIR%\\docker-compose.yml" -p "%COMPOSE_PROJECT%" down -v
-                        del /f /q "%API_CHECKOUT_DIR%\\.env"
+                        if exist "%API_CHECKOUT_DIR%\\.env" del /f /q "%API_CHECKOUT_DIR%\\.env"
+                        exit /b 0
                     '''
                 }
             }

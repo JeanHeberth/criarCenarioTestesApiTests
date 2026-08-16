@@ -104,14 +104,30 @@ O [`Jenkinsfile`](./Jenkinsfile) deste repositório:
 
 ### Credenciais Jenkins necessárias (tipo "Secret text")
 
+**Obrigatórias** — sem elas a API nem sobe (`application.yml` não tem
+default para essas três):
+
 | Credential ID                        | Variável de ambiente na API |
 |---------------------------------------|------------------------------|
 | `criar-cenario-testes-mongo-uri`      | `MONGO_URI_NUVEM`            |
 | `criar-cenario-testes-openai-key`     | `OPENAI_API_KEY`             |
 | `criar-cenario-testes-gemini-key`     | `GEMINI_API_KEY`             |
+
+**Opcionais** — têm default vazio em `application.yml`
+(`${JIRA_BASE_URL:}`) e a suite `smoke` nunca chama o Jira de verdade
+(só valida formato de `taskKey` antes de qualquer request externa). Se
+não forem criadas, o pipeline segue normalmente — só são necessárias
+para rodar o teste `e2e` de Jira (`testRegression`):
+
+| Credential ID                        | Variável de ambiente na API |
+|---------------------------------------|------------------------------|
 | `criar-cenario-testes-jira-base-url`  | `JIRA_BASE_URL`              |
 | `criar-cenario-testes-jira-email`     | `JIRA_EMAIL`                 |
 | `criar-cenario-testes-jira-api-token` | `JIRA_API_TOKEN`             |
+
+Como criar: **Gerenciar Jenkins → Credentials → System → Global
+credentials (unrestricted) → Add Credentials → kind "Secret text"**,
+usando exatamente os IDs acima.
 
 ### Disparo automático em merge para `develop` da API
 
@@ -120,11 +136,11 @@ Este Jenkinsfile mora no repo de testes, mas precisa reagir a pushes na
 do job, não do Pipeline script. Duas formas, veja o comentário no topo do
 `Jenkinsfile` para o snippet completo:
 
-1. **Recomendado** — adicionar, ao final do `Jenkinsfile` da API, um
-   `build job: 'criar-cenario-testes-api-tests', wait: false` disparado só
-   quando a branch for `develop`. Não foi feito automaticamente aqui: é
-   uma alteração em outro repositório/pipeline e deve ser decidida
-   conscientemente. Posso aplicar essa mudança se você confirmar.
+1. **Feito** — o `Jenkinsfile` da API já tem o stage `Disparar Testes
+   Automatizados (develop)`, que chama
+   `build job: 'criarCenarioTesteAPITestes', wait: false` quando a branch
+   for `develop`. Exige que o job neste repo se chame exatamente
+   `criarCenarioTesteAPITestes` no Jenkins (é o nome atual).
 2. Configurar este job no Jenkins com um webhook do GitHub/GitLab apontando
    para o repositório da API (branch `develop`) via plugin *Generic
    Webhook Trigger*, mantendo o "Pipeline script from SCM" apontando para

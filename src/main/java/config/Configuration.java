@@ -42,4 +42,12 @@ public class Configuration {
     public static String getJiraTaskKeyInvalido() {
         return (String) getSection("jira").get("taskKeyInvalido");
     }
+
+    public static String getZephyrBaseUri() {
+        return (String) getSection("zephyr").get("baseUri");
+    }
+
+    public static String getZephyrTestCaseKeyPattern() {
+        return (String) getSection("zephyr").get("testCaseKeyPattern");
+    }
 }

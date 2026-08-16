@@ -14,6 +14,7 @@
             <package name="jira"/>
             <package name="agent"/>
             <package name="autoqa"/>
+            <package name="zephyr"/>
         </packages>
     </test>
 </suite>

@@ -3,6 +3,9 @@ api:
   readinessTimeoutSeconds: 60
 
 jira:
-  # Formato exigido pelo JiraController: ^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+$
   taskKeyValido: EX-OP-1122
   taskKeyInvalido: chave_invalida!!
+
+zephyr:
+  baseUri: https://api.zephyrscale.smartbear.com/v2
+  testCaseKeyPattern: "^[A-Z][A-Z0-9]*-T\\d+$"

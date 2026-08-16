@@ -15,9 +15,9 @@ Suite de testes de API (TestNG + RestAssured) para o projeto
 
 ```
 src/main/java
-├── config/            # Environment (baseUrl via system property/env var) e Configuration (data.yaml)
+├── config/            # Environment (baseUrl/tokens via system property/env var) e Configuration (data.yaml)
 ├── constants/endpoints # Enum Endpoint — única fonte de verdade das rotas da API
-├── clients/            # Wrappers RestAssured por domínio (cenario, jira, agent, autoqa)
+├── clients/            # Wrappers RestAssured por domínio (cenario, jira, agent, autoqa, zephyr)
 ├── models/request/     # DTOs de request espelhando os records da API
 └── factories/          # Geração de payloads válidos/inválidos para os testes
 
@@ -27,7 +27,8 @@ src/test/java
 ├── cenario/             # /cenario — smoke + e2e (geração via IA)
 ├── jira/                # /jira/tasks/** — smoke (validação de path) + e2e
 ├── agent/               # /api/agents/** — smoke + e2e
-└── autoqa/              # /api/auto-qa/executions/** — smoke + e2e
+├── autoqa/              # /api/auto-qa/executions/** — smoke + e2e
+└── zephyr/              # verificação e2e real de publicação no Zephyr Scale (ver seção própria abaixo)
 ```
 
 ## Estratégia de suites: `smoke` vs `e2e`
@@ -65,6 +66,33 @@ lidos; preencha os campos reais antes de habilitá-los.
   (`statusCode >= 400`) em vez de fixar o código exato — vale o time
   confirmar/fechar esse contrato.
 
+## Verificação real de publicação no Zephyr Scale
+
+`zephyr/ZephyrPublishingTest` é a resposta à pergunta "isso realmente criou
+o caso de teste no Zephyr?" — e por isso não confia na palavra da nossa
+própria API:
+
+1. Chama `POST /cenario` na API sob teste (gera cenário real via IA, que
+   agora aciona `ZephyrPublisherAgent` no backend).
+2. Para cada item da resposta, pega `cenarios[].zephyrTestCaseKey`.
+3. Consulta **direto a API oficial do Zephyr Scale**
+   (`GET https://api.zephyrscale.smartbear.com/v2/testcases/{key}`, via
+   `ZephyrVerificationClient` — um client isolado, que nunca fala com a
+   nossa API) e confirma que a `key` e o `name` batem com o que foi gerado.
+
+Fica **desabilitado por padrão** (`enabled = false`): cada execução cria um
+caso de teste real e permanente no board do Zephyr, além de custar uma
+geração de IA. Para habilitar:
+
+1. Na API sob teste: `ZEPHYR_ENABLED=true`, `ZEPHYR_API_TOKEN`,
+   `ZEPHYR_PROJECT_KEY` apontando pro projeto certo (ver
+   `.env.example`/README da API).
+2. Neste projeto: variável `ZEPHYR_API_TOKEN` (ou `-Dzephyr.apiToken=...`)
+   com um token do Zephyr Scale — usado só pela verificação, é uma chamada
+   independente da API sob teste.
+3. Remover `enabled = false` em `ZephyrPublishingTest`.
+4. Rodar `./gradlew testZephyr -Dapi.baseUrl=... -Dzephyr.apiToken=...`.
+
 ## Rodando localmente
 
 ```bash
@@ -72,8 +100,8 @@ lidos; preencha os campos reais antes de habilitá-los.
 # (MONGO_URI_NUVEM, OPENAI_API_KEY, GEMINI_API_KEY configurados no .env dela)
 
 ./gradlew testSmoke        # suite rápida
-./gradlew testRegression   # suite completa (inclui e2e)
-./gradlew testWorkflow     # só um domínio, ex.: workflow/cenario/jira/agent/autoqa
+./gradlew testRegression   # suite completa (inclui e2e — Zephyr continua opt-in mesmo aqui, ver seção acima)
+./gradlew testWorkflow     # só um domínio, ex.: workflow/cenario/jira/agent/autoqa/zephyr
 ```
 
 Apontar para outra URL de API:

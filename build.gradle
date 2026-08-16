@@ -71,6 +71,11 @@ tasks.withType(Test).configureEach {
     // Repassa a URL base da API sob teste, se informada pelo ambiente/CI.
     systemProperty 'api.baseUrl', System.getProperty('api.baseUrl', System.getenv('API_BASE_URL') ?: '')
 
+    // Repassa credenciais/URL do Zephyr Scale para a verificação e2e real
+    // (ZephyrPublishingTest), se informadas pelo ambiente/CI.
+    systemProperty 'zephyr.baseUrl', System.getProperty('zephyr.baseUrl', System.getenv('ZEPHYR_BASE_URL') ?: '')
+    systemProperty 'zephyr.apiToken', System.getProperty('zephyr.apiToken', System.getenv('ZEPHYR_API_TOKEN') ?: '')
+
     testLogging {
         events 'passed', 'skipped', 'failed'
         exceptionFormat 'full'
@@ -124,6 +129,12 @@ tasks.register('testAutoQa', Test) {
     description = 'Executa os testes do ciclo de execução Auto QA.'
     group = 'verification'
     include '**/autoqa/**'
+}
+
+tasks.register('testZephyr', Test) {
+    description = 'Executa a verificação e2e real de publicação no Zephyr Scale (desabilitada por padrão).'
+    group = 'verification'
+    include '**/zephyr/**'
 }
 
 test {

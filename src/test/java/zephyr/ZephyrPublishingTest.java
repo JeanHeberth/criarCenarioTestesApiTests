@@ -98,7 +98,10 @@ public class ZephyrPublishingTest extends BaseTest {
             // 3) A pasta também precisa existir de verdade e ter o nome certo -
             // quando o item não define CenarioItem#pasta, ZephyrPublisherAgent
             // cai pro título do pedido (ver resolverFolderId).
-            Integer folderId = zephyrResponse.jsonPath().getInt("folder.id");
+            // getInt() devolve int primitivo: quando o caso de teste não tem
+            // pasta, o unboxing de null estoura NPE antes do guard abaixo.
+            // getObject(..., Integer.class) devolve null de verdade.
+            Integer folderId = zephyrResponse.jsonPath().getObject("folder.id", Integer.class);
             if (folderId != null) {
                 Response folderResponse = zephyrVerificationClient.buscarPasta(folderId);
                 folderResponse.then().statusCode(200);

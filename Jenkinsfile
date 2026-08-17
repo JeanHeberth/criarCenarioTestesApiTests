@@ -143,6 +143,50 @@ EOF
                     }
                 }
 
+                // Claude é opcional pelo mesmo motivo do Jira: ANTHROPIC_API_KEY
+                // tem default vazio em application.yml e a API só chama a
+                // Anthropic quando AI_ACTIVE_PROVIDER=claude. Configurar a
+                // credencial no Jenkins é o que habilita rodar a suite contra o
+                // Claude sem tocar em código.
+                script {
+                    try {
+                        withCredentials([
+                            string(credentialsId: 'criar-cenario-testes-anthropic-key', variable: 'ANTHROPIC_API_KEY')
+                        ]) {
+                            if (isUnix()) {
+                                sh '''
+                                    cat >> "$API_CHECKOUT_DIR/.env" <<EOF
+ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+EOF
+                                '''
+                            } else {
+                                bat '''
+                                    @echo off
+                                    (
+                                        echo ANTHROPIC_API_KEY=%ANTHROPIC_API_KEY%
+                                    ) >> "%API_CHECKOUT_DIR%\\.env"
+                                '''
+                            }
+                        }
+                    } catch (err) {
+                        echo 'Credencial da Anthropic não configurada no Jenkins — seguindo sem o provider Claude (a API sobe normalmente e usa o provider configurado em AI_ACTIVE_PROVIDER).'
+                        if (isUnix()) {
+                            sh '''
+                                cat >> "$API_CHECKOUT_DIR/.env" <<EOF
+ANTHROPIC_API_KEY=
+EOF
+                            '''
+                        } else {
+                            bat '''
+                                @echo off
+                                (
+                                    echo ANTHROPIC_API_KEY=
+                                ) >> "%API_CHECKOUT_DIR%\\.env"
+                            '''
+                        }
+                    }
+                }
+
                 script {
                     echo "Subindo backend via docker compose (projeto: ${COMPOSE_PROJECT})..."
 

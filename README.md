@@ -153,6 +153,15 @@ para rodar o teste `e2e` de Jira (`testRegression`):
 | `criar-cenario-testes-jira-email`     | `JIRA_EMAIL`                 |
 | `criar-cenario-testes-jira-api-token` | `JIRA_API_TOKEN`             |
 
+Também opcional, pelo mesmo motivo (`${ANTHROPIC_API_KEY:}` tem default
+vazio e a API só chama a Anthropic quando `AI_ACTIVE_PROVIDER=claude`).
+Configurar essa credencial é o que permite rodar a suite contra o Claude
+sem alterar código:
+
+| Credential ID                          | Variável de ambiente na API |
+|----------------------------------------|------------------------------|
+| `criar-cenario-testes-anthropic-key`   | `ANTHROPIC_API_KEY`          |
+
 Como criar: **Gerenciar Jenkins → Credentials → System → Global
 credentials (unrestricted) → Add Credentials → kind "Secret text"**,
 usando exatamente os IDs acima.

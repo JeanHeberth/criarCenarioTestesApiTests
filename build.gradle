@@ -54,6 +54,42 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.46'
 }
 
+// Carrega um .env opcional do próprio projeto. Sem isso, a configuração só
+// chegava por variável de ambiente exportada — o que funciona no Jenkins mas
+// quebra ao rodar pela IDE (que não herda o ~/.zshrc) e obriga a passar tudo
+// com -D na mão no terminal. O arquivo é ignorado pelo git (.gitignore).
+def dotenv = [:]
+def dotenvFile = file('.env')
+if (dotenvFile.exists()) {
+    dotenvFile.eachLine { linha ->
+        def texto = linha.trim()
+        if (texto.isEmpty() || texto.startsWith('#')) {
+            return
+        }
+        def separador = texto.indexOf('=')
+        if (separador <= 0) {
+            return
+        }
+        def chave = texto.substring(0, separador).trim()
+        def valor = texto.substring(separador + 1).trim()
+        // Aceita valores entre aspas, como o formato .env usual.
+        if (valor.length() >= 2
+                && ((valor.startsWith('"') && valor.endsWith('"'))
+                || (valor.startsWith("'") && valor.endsWith("'")))) {
+            valor = valor.substring(1, valor.length() - 1)
+        }
+        dotenv[chave] = valor
+    }
+    logger.lifecycle("Configuração carregada de .env (${dotenv.size()} chaves).")
+}
+
+// Precedência: -D na linha de comando > variável de ambiente > .env local.
+// A ordem importa: o CI exporta variáveis de ambiente e não deve ser
+// sobrescrito por um .env que porventura exista no workspace.
+def resolverConfig = { String systemProperty, String envVar ->
+    System.getProperty(systemProperty) ?: System.getenv(envVar) ?: dotenv[envVar] ?: ''
+}
+
 tasks.withType(Test).configureEach {
 
     useTestNG()
@@ -68,13 +104,13 @@ tasks.withType(Test).configureEach {
                     .absolutePath
     )
 
-    // Repassa a URL base da API sob teste, se informada pelo ambiente/CI.
-    systemProperty 'api.baseUrl', System.getProperty('api.baseUrl', System.getenv('API_BASE_URL') ?: '')
+    // Repassa a URL base da API sob teste, se informada pelo ambiente/CI/.env.
+    systemProperty 'api.baseUrl', resolverConfig('api.baseUrl', 'API_BASE_URL')
 
     // Repassa credenciais/URL do Zephyr Scale para a verificação e2e real
-    // (ZephyrPublishingTest), se informadas pelo ambiente/CI.
-    systemProperty 'zephyr.baseUrl', System.getProperty('zephyr.baseUrl', System.getenv('ZEPHYR_BASE_URL') ?: '')
-    systemProperty 'zephyr.apiToken', System.getProperty('zephyr.apiToken', System.getenv('ZEPHYR_API_TOKEN') ?: '')
+    // (ZephyrPublishingTest), se informadas pelo ambiente/CI/.env.
+    systemProperty 'zephyr.baseUrl', resolverConfig('zephyr.baseUrl', 'ZEPHYR_BASE_URL')
+    systemProperty 'zephyr.apiToken', resolverConfig('zephyr.apiToken', 'ZEPHYR_API_TOKEN')
 
     testLogging {
         events 'passed', 'skipped', 'failed'

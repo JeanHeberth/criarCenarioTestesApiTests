@@ -1,5 +1,5 @@
 api:
-  baseUri: http://localhost:8089
+  baseUri: http://100.83.72.100:9999/criar-cenario-testes
   readinessTimeoutSeconds: 60
 
 jira:
